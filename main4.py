@@ -67,7 +67,8 @@ if not mistral_api_key:
 
 groq_api_key = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
-    raise ValueError("GROQ_API_KEY not found. Please add it to your .env file.")
+    logger.error("GROQ_API_KEY not found. Please add it to your environment variables.")
+    # Don't raise error during startup, handle it in the function instead
 
 # Global variables for lazy initialization
 _easyocr_reader = None
@@ -93,7 +94,7 @@ def get_mistral_client():
 def get_groq_client():
     """Lazy initialization of Groq client."""
     global _groq_client
-    if _groq_client is None:
+    if _groq_client is None and groq_api_key:
         logger.info("Initializing Groq client...")
         _groq_client = Groq(api_key=groq_api_key)
     return _groq_client
@@ -284,6 +285,16 @@ def validate_compliance_with_groq(title: str, ocr_texts: List[str]) -> Dict:
         """
         logger.debug(f"Sending Groq API request: model=meta-llama/llama-4-maverick-17b-128e-instruct, prompt length={len(prompt)}")
         groq_client = get_groq_client()
+        if not groq_client:
+            logger.error("Groq client not available - missing API key")
+            return {
+                "actual_list": [],
+                "expected_list": COMPLIANCE_FIELDS,
+                "violations_count": len(COMPLIANCE_FIELDS),
+                "compliance_percent": 0.0,
+                "compliance_status": "Non-compliant",
+                "field_status": {field: "missing" for field in COMPLIANCE_FIELDS}
+            }
         response = groq_client.chat.completions.create(
             model="meta-llama/llama-4-maverick-17b-128e-instruct",
             messages=[
@@ -737,4 +748,5 @@ async def get_home(request: Request):
     
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
