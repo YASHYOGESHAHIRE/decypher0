@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Query
-from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
@@ -60,18 +60,43 @@ class ProductResponse(BaseModel):
     success: bool
     message: str = ""
 
-# Initialize OCR readers and AI clients
-easyocr_reader = easyocr.Reader(['en'], gpu=False)
-
+# Initialize API keys (lazy loading for heavy clients)
 mistral_api_key = os.getenv("MISTRAL_API_KEY")
-mistral_client = Mistral(api_key=mistral_api_key) if mistral_api_key else None
 if not mistral_api_key:
     logger.warning("MISTRAL_API_KEY not found. Mistral OCR will be unavailable.")
 
 groq_api_key = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
     raise ValueError("GROQ_API_KEY not found. Please add it to your .env file.")
-groq_client = Groq(api_key=groq_api_key)
+
+# Global variables for lazy initialization
+_easyocr_reader = None
+_mistral_client = None
+_groq_client = None
+
+def get_easyocr_reader():
+    """Lazy initialization of EasyOCR reader to save memory."""
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        logger.info("Initializing EasyOCR reader...")
+        _easyocr_reader = easyocr.Reader(['en'], gpu=False)
+    return _easyocr_reader
+
+def get_mistral_client():
+    """Lazy initialization of Mistral client."""
+    global _mistral_client
+    if _mistral_client is None and mistral_api_key:
+        logger.info("Initializing Mistral client...")
+        _mistral_client = Mistral(api_key=mistral_api_key)
+    return _mistral_client
+
+def get_groq_client():
+    """Lazy initialization of Groq client."""
+    global _groq_client
+    if _groq_client is None:
+        logger.info("Initializing Groq client...")
+        _groq_client = Groq(api_key=groq_api_key)
+    return _groq_client
 
 MIN_BBOX_THRESHOLD = 0
 COMPLIANCE_FIELDS = ["MRP", "Net Quantity", "Expiry Date", "Manufacturer", "Country of Origin"]
@@ -136,7 +161,8 @@ def check_text_density(image_url: str) -> tuple[int, float]:
         response = requests.get(image_url, headers=headers, timeout=10)
         response.raise_for_status()
         image = Image.open(io.BytesIO(response.content))
-        results = easyocr_reader.readtext(image, detail=1)
+        reader = get_easyocr_reader()
+        results = reader.readtext(image, detail=1)
         bbox_count = len(results)
         avg_confidence = sum([res[2] for res in results]) / bbox_count if bbox_count > 0 else 0.0
         logger.info(f"Image {image_url} has {bbox_count} text bounding boxes with average confidence {avg_confidence:.2f}")
@@ -151,7 +177,8 @@ def extract_text_easyocr(image_url: str) -> tuple[str, float]:
         response = requests.get(image_url, headers=headers, timeout=10)
         response.raise_for_status()
         image = Image.open(io.BytesIO(response.content))
-        results = easyocr_reader.readtext(image, detail=1)
+        reader = get_easyocr_reader()
+        results = reader.readtext(image, detail=1)
         text = ' '.join([res[1] for res in results]) if results else "No text detected"
         avg_confidence = sum([res[2] for res in results]) / len(results) if results else 0.0
         logger.info(f"EasyOCR processed image {image_url}: {text} (confidence: {avg_confidence:.2f})")
@@ -162,6 +189,7 @@ def extract_text_easyocr(image_url: str) -> tuple[str, float]:
 
 def extract_text_mistral(image_url: str) -> tuple[str, float]:
     try:
+        mistral_client = get_mistral_client()
         if not mistral_client:
             return "Mistral client not initialized", 0.0
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
@@ -255,6 +283,7 @@ def validate_compliance_with_groq(title: str, ocr_texts: List[str]) -> Dict:
         {combined_text}
         """
         logger.debug(f"Sending Groq API request: model=meta-llama/llama-4-maverick-17b-128e-instruct, prompt length={len(prompt)}")
+        groq_client = get_groq_client()
         response = groq_client.chat.completions.create(
             model="meta-llama/llama-4-maverick-17b-128e-instruct",
             messages=[
@@ -397,7 +426,7 @@ async def scrape_amazon_product(url: str, ocr_method: str) -> AsyncGenerator[str
         ocr_texts = []
         for img_url in text_rich_images:
             yield json.dumps({"step": "extracting_text", "message": f"Extracting text from image: {img_url} using {ocr_method}"})
-            if ocr_method == "mistral" and mistral_client:
+            if ocr_method == "mistral" and mistral_api_key:
                 text, confidence = extract_text_mistral(img_url)
                 ocr_confidences.append(confidence)
             else:
