@@ -3,7 +3,7 @@ uvicorn[standard]==0.30.6
 requests==2.32.3
 beautifulsoup4==4.12.3
 pydantic==2.9.2
-easyocr==1.7.1
+# easyocr==1.7.1  # Removed - using cloud APIs only for zero memory usage
 Pillow==10.4.0
 mistralai
 python-dotenv==1.0.1

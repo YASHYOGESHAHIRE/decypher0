@@ -497,8 +497,12 @@
       menuBtn.setAttribute('aria-expanded', String(!expanded));
     }
     function closeDrawer(){ drawer.classList.remove('open'); menuBtn.setAttribute('aria-expanded','false'); }
-    menuBtn.addEventListener('click', toggleDrawer);
-    drawer.addEventListener('click', (e)=>{ if(e.target === drawer){ closeDrawer(); } });
+    if (menuBtn) {
+      menuBtn.addEventListener('click', toggleDrawer);
+    }
+    if (drawer) {
+      drawer.addEventListener('click', (e)=>{ if(e.target === drawer){ closeDrawer(); } });
+    }
 
     // Smooth scroll helper
     function scrollToId(id){

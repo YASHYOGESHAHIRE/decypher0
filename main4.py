@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import json
 import re
 from typing import List, Dict, AsyncGenerator, Optional
-import easyocr
+# import easyocr  # Removed to save memory - using cloud APIs only
 from PIL import Image
 import io
 import base64
@@ -79,18 +79,9 @@ if not hf_api_key:
 HF_OCR_API_URL = "https://api-inference.huggingface.co/models/microsoft/trocr-base-printed"
 HF_API_HEADERS = {"Authorization": f"Bearer {hf_api_key}"} if hf_api_key else {}
 
-# Global variables for lazy initialization
-_easyocr_reader = None
+# Global variables for lazy initialization (cloud APIs only)
 _mistral_client = None
 _groq_client = None
-
-def get_easyocr_reader():
-    """Lazy initialization of EasyOCR reader to save memory."""
-    global _easyocr_reader
-    if _easyocr_reader is None:
-        logger.info("Initializing EasyOCR reader...")
-        _easyocr_reader = easyocr.Reader(['en'], gpu=False)
-    return _easyocr_reader
 
 def extract_text_huggingface(image_url: str) -> tuple[str, float]:
     """Extract text using Hugging Face Inference API - much faster and no local models."""
@@ -121,15 +112,15 @@ def extract_text_huggingface(image_url: str) -> tuple[str, float]:
                 logger.warning(f"Unexpected HF API response format: {result}")
                 return "No text detected", 0.0
         elif hf_response.status_code == 503:
-            logger.warning("Hugging Face model is loading, falling back to local EasyOCR")
-            return extract_text_easyocr_fallback(image_url)
+            logger.warning("Hugging Face model is loading, will retry or use basic text extraction")
+            return "Model loading, please try again", 0.3
         else:
             logger.error(f"Hugging Face API error: {hf_response.status_code} - {hf_response.text}")
-            return extract_text_easyocr_fallback(image_url)
+            return f"OCR API error: {hf_response.status_code}", 0.0
             
     except Exception as e:
         logger.error(f"Hugging Face OCR failed for {image_url}: {str(e)}")
-        return extract_text_easyocr_fallback(image_url)
+        return f"OCR failed: {str(e)}", 0.0
 
 def get_mistral_client():
     """Lazy initialization of Mistral client."""
@@ -205,36 +196,24 @@ async def log_to_supabase(product_report: dict):
         logger.error(f"❌ Product data: {product_report.get('product_name')} - {product_report.get('product_link')}")
 
 def check_text_density(image_url: str) -> tuple[int, float]:
+    """
+    Simplified text density check - assume all images have text since we're using cloud OCR.
+    This eliminates the need for local EasyOCR model loading.
+    """
     try:
+        # Simple check - just verify the image is accessible
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
         response = requests.get(image_url, headers=headers, timeout=10)
         response.raise_for_status()
-        image = Image.open(io.BytesIO(response.content))
-        reader = get_easyocr_reader()
-        results = reader.readtext(image, detail=1)
-        bbox_count = len(results)
-        avg_confidence = sum([res[2] for res in results]) / bbox_count if bbox_count > 0 else 0.0
-        logger.info(f"Image {image_url} has {bbox_count} text bounding boxes with average confidence {avg_confidence:.2f}")
-        return bbox_count, avg_confidence
+        
+        # Assume images have text (cloud OCR will handle detection)
+        logger.info(f"Image {image_url} is accessible - proceeding with cloud OCR")
+        return 1, 0.8  # Assume text present with good confidence
     except Exception as e:
-        logger.error(f"Bounding box check failed for {image_url}: {str(e)}")
+        logger.error(f"Image accessibility check failed for {image_url}: {str(e)}")
         return 0, 0.0
 
-def extract_text_easyocr_fallback(image_url: str) -> tuple[str, float]:
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
-        response = requests.get(image_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        image = Image.open(io.BytesIO(response.content))
-        reader = get_easyocr_reader()
-        results = reader.readtext(image, detail=1)
-        text = ' '.join([res[1] for res in results]) if results else "No text detected"
-        avg_confidence = sum([res[2] for res in results]) / len(results) if results else 0.0
-        logger.info(f"EasyOCR processed image {image_url}: {text} (confidence: {avg_confidence:.2f})")
-        return text.strip(), avg_confidence
-    except Exception as e:
-        logger.error(f"EasyOCR failed for {image_url}: {str(e)}")
-        return f"EasyOCR text extraction failed: {str(e)}", 0.0
+# EasyOCR fallback function removed - using cloud APIs only for zero memory usage
 
 def extract_text_mistral(image_url: str) -> tuple[str, float]:
     try:
@@ -388,7 +367,7 @@ async def scrape_amazon_product(url: str, ocr_method: str) -> AsyncGenerator[str
     try:
         yield json.dumps({"step": "start", "message": f"Starting to scrape Amazon product page: {url}"})
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         }

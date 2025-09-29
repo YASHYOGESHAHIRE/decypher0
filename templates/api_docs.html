@@ -111,7 +111,7 @@
             </span>
         </div>
         <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
-            <strong>Note:</strong> Ensure the backend server is running at <code>http://localhost:8000</code> for testing. 
+            <strong>Note:</strong> API endpoints work with both local development and production deployment. 
             Production deployment supports government-grade security and scalability.
         </p>
     </div>
@@ -230,7 +230,7 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000'; // Change to your deployed URL if needed
+        const API_BASE = ''; // Use relative paths for both local and production
 
         function tryScrape() {
             const url = document.getElementById('scrape-url').value;
