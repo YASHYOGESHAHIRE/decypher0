@@ -255,7 +255,35 @@
   </style>
 </head>
 <body>
-  <!-- Header removed for iframe embedding -->
+  <header>
+    <div class="container">
+      <div class="nav">
+        <div class="logo">Legal Metrology AI</div>
+        <div class="nav-links">
+          <a href="/scanner">Scanner</a>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/analytics">Analytics</a>
+          <a href="/api-docs">API Docs</a>
+        </div>
+        <div class="nav-cta">
+          <button class="btn btn-primary" onclick="window.location.href='/scanner'">Start Scanning</button>
+        </div>
+        <button class="nav-toggle" id="menuBtn" aria-expanded="false">
+          <span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile drawer -->
+  <div class="drawer" id="drawer">
+    <div class="inner">
+      <a href="/scanner">Scanner</a>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/analytics">Analytics</a>
+      <a href="/api-docs">API Documentation</a>
+    </div>
+  </div>
 
   <main>
      Hero 
@@ -266,7 +294,7 @@
           <h1>Automated Legal Metrology Compliance Checker for E-Commerce Platforms</h1>
           <p>Ensure regulatory compliance across digital marketplaces with our AI-powered solution that validates product declarations against Legal Metrology (Packaged Commodities) Rules, 2011. Real-time scanning, OCR extraction, and intelligent rule validation for scalable enforcement.</p>
           <div class="hero-cta">
-            <button class="btn btn-primary" id="upload">Upload Label</button>
+            <button class="btn btn-primary" onclick="window.location.href='/scanner'">Upload Label</button>
             <button class="btn btn-secondary" onclick="scrollToId('report')">See Sample Report</button>
             <div class="hero-callout">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -427,7 +455,8 @@
             <p class="section-sub">See how issues are grouped, prioritized, and explained with the exact fix steps.</p>
           </div>
           <div class="row">
-            <button class="btn btn-secondary" onclick="scrollToId('features')">View Features</button>
+            <button class="btn btn-secondary" onclick="window.location.href='/dashboard'">View Dashboard</button>
+            <button class="btn btn-secondary" onclick="window.location.href='/analytics'">View Analytics</button>
           </div>
         </div>
 
@@ -471,7 +500,7 @@
             <p class="muted" style="color:rgba(255,255,255,0.85)">Scan any e-commerce product to get instant compliance verification and detailed regulatory analysis.</p>
           </div>
           <div class="cta-row">
-            <button class="btn btn-primary" onclick="window.parent.postMessage({action: 'navigate', page: 'scanner'}, '*')">Start Scanning</button>
+            <button class="btn btn-primary" onclick="window.location.href='/scanner'">Start Scanning</button>
             <button class="btn btn-secondary" onclick="scrollToId('contact')">Contact Support</button>
           </div>
         </div>
