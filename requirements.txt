@@ -1,0 +1,18 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+jinja2==3.1.4
+pydantic==2.9.2
+requests==2.32.3
+beautifulsoup4==4.12.3
+easyocr==1.7.2
+Pillow==10.4.0
+mistralai==0.1.7
+groq==0.9.0
+supabase==2.10.0
+python-dotenv==1.0.1
+
+# Render sometimes needs aiohttp for async libs
+aiohttp==3.10.10
+
+# Logging helpers
+coloredlogs==15.0.1
