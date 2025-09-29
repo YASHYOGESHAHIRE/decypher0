@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
 import requests
@@ -26,14 +25,12 @@ from supabase import create_client, Client
 # Load environment variables from .env file
 load_dotenv(override=True)
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Amazon Product Scraper with Compliance Validation", version="T1.0.9")
 
-# Static and templates directories
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Templates directory
 templates = Jinja2Templates(directory="templates")
 
 # Add CORS middleware
