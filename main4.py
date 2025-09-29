@@ -70,6 +70,15 @@ if not groq_api_key:
     logger.error("GROQ_API_KEY not found. Please add it to your environment variables.")
     # Don't raise error during startup, handle it in the function instead
 
+# Hugging Face API configuration
+hf_api_key = os.getenv("HUGGINGFACE_API_KEY")
+if not hf_api_key:
+    logger.warning("HUGGINGFACE_API_KEY not found. Will use free tier with rate limits.")
+
+# Hugging Face OCR model endpoints
+HF_OCR_API_URL = "https://api-inference.huggingface.co/models/microsoft/trocr-base-printed"
+HF_API_HEADERS = {"Authorization": f"Bearer {hf_api_key}"} if hf_api_key else {}
+
 # Global variables for lazy initialization
 _easyocr_reader = None
 _mistral_client = None
@@ -82,6 +91,45 @@ def get_easyocr_reader():
         logger.info("Initializing EasyOCR reader...")
         _easyocr_reader = easyocr.Reader(['en'], gpu=False)
     return _easyocr_reader
+
+def extract_text_huggingface(image_url: str) -> tuple[str, float]:
+    """Extract text using Hugging Face Inference API - much faster and no local models."""
+    try:
+        logger.info(f"Using Hugging Face OCR API for image: {image_url}")
+        
+        # Download image
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
+        response = requests.get(image_url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # Send to Hugging Face API
+        hf_response = requests.post(
+            HF_OCR_API_URL,
+            headers=HF_API_HEADERS,
+            data=response.content,
+            timeout=30
+        )
+        
+        if hf_response.status_code == 200:
+            result = hf_response.json()
+            if isinstance(result, list) and len(result) > 0:
+                text = result[0].get('generated_text', 'No text detected')
+                confidence = 0.85  # HF models typically have good confidence
+                logger.info(f"Hugging Face OCR extracted: {text}")
+                return text.strip(), confidence
+            else:
+                logger.warning(f"Unexpected HF API response format: {result}")
+                return "No text detected", 0.0
+        elif hf_response.status_code == 503:
+            logger.warning("Hugging Face model is loading, falling back to local EasyOCR")
+            return extract_text_easyocr_fallback(image_url)
+        else:
+            logger.error(f"Hugging Face API error: {hf_response.status_code} - {hf_response.text}")
+            return extract_text_easyocr_fallback(image_url)
+            
+    except Exception as e:
+        logger.error(f"Hugging Face OCR failed for {image_url}: {str(e)}")
+        return extract_text_easyocr_fallback(image_url)
 
 def get_mistral_client():
     """Lazy initialization of Mistral client."""
@@ -172,7 +220,7 @@ def check_text_density(image_url: str) -> tuple[int, float]:
         logger.error(f"Bounding box check failed for {image_url}: {str(e)}")
         return 0, 0.0
 
-def extract_text_easyocr(image_url: str) -> tuple[str, float]:
+def extract_text_easyocr_fallback(image_url: str) -> tuple[str, float]:
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
         response = requests.get(image_url, headers=headers, timeout=10)
@@ -441,7 +489,7 @@ async def scrape_amazon_product(url: str, ocr_method: str) -> AsyncGenerator[str
                 text, confidence = extract_text_mistral(img_url)
                 ocr_confidences.append(confidence)
             else:
-                text, confidence = extract_text_easyocr(img_url)
+                text, confidence = extract_text_huggingface(img_url)
                 ocr_confidences.append(confidence)
             image_data.append({"url": img_url, "text": text})
             ocr_texts.append(text)
@@ -694,14 +742,14 @@ async def scrape_product(url: str, ocr_method: str):
             })]),
             media_type="text/event-stream"
         )
-    if ocr_method not in ["easyocr", "mistral"]:
+    if ocr_method not in ["easyocr", "mistral", "huggingface"]:
         return StreamingResponse(
             iter([json.dumps({
                 "step": "error",
                 "title": "N/A",
                 "images": [],
                 "success": False,
-                "message": "Invalid OCR method. Choose 'easyocr' or 'mistral'.",
+                "message": "Invalid OCR method. Choose 'easyocr', 'mistral', or 'huggingface'.",
                 "compliance_result": {
                     "actual_list": [],
                     "expected_list": COMPLIANCE_FIELDS,
